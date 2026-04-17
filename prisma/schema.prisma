@@ -1,0 +1,80 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum MetodoPagamento {
+  DINHEIRO
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  PIX
+}
+
+model Produto {
+  id            Int     @id @default(autoincrement())
+  nome          String
+  preco         Float
+  code  String  @unique
+  estoque       Int     @default(0)
+
+  categoriaId   Int
+  categoria     Categoria @relation(fields: [categoriaId], references: [id])
+
+  itensVenda    ItemVenda[] 
+}
+
+model Categoria {
+  id        Int       @id @default(autoincrement())
+  nome      String    @unique
+  produtos  Produto[]
+
+}
+
+model Usuario {
+  id         Int      @id @default(autoincrement())
+  nome       String
+  cpf        String   @unique
+  endereco   String
+  divida     Decimal
+
+  pagamentos Pagamento[]
+  vendas     Venda[]
+}
+
+model Pagamento {
+  id         String   @id @default(uuid())
+  valor      Decimal
+  data       DateTime @default(now())
+
+  usuarioId  Int
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+}
+
+model Venda {
+  id          Int       @id @default(autoincrement())
+  data        DateTime  @default(now())
+  total       Decimal
+
+  metodo      MetodoPagamento @default(DINHEIRO)
+
+  usuarioId   Int?      
+  usuario     Usuario?  @relation(fields: [usuarioId], references: [id])
+
+  itens       ItemVenda[]
+}
+
+model ItemVenda {
+  id          Int     @id @default(autoincrement())
+
+  vendaId     Int
+  venda       Venda   @relation(fields: [vendaId], references: [id])
+
+  produtoId   Int
+  produto     Produto @relation(fields: [produtoId], references: [id] , onDelete: Cascade)
+
+  quantidade  Int
+  preco       Float   // preço no momento da venda
+}
