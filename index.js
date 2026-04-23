@@ -21,29 +21,23 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/backup", (req, res) => {
-  // 1. Use o caminho correto (database.db na raiz)
   const DB_SOURCE = path.resolve(__dirname, "database.db"); 
   const backupTempPath = path.resolve(__dirname, "temp-backup.db");
 
-  // Verificação de segurança: o arquivo de origem existe?
   if (!fs.existsSync(DB_SOURCE)) {
     console.error("Arquivo original não encontrado em:", DB_SOURCE);
     return res.status(404).send("Arquivo de banco de dados original não encontrado.");
   }
 
-  // 2. Abre a conexão com o banco oficial
   const db = new Database(DB_SOURCE);
 
-  // 3. Gera o snapshot do backup
   db.backup(backupTempPath)
     .then(() => {
-      // 4. Envia o arquivo para o navegador
       res.download(backupTempPath, "backup-sistema.db", (err) => {
         if (err) {
           console.error("Erro no download:", err);
         }
-        
-        // 5. SEMPRE feche a instância e remova o temporário
+      
         db.close(); 
         if (fs.existsSync(backupTempPath)) {
           fs.unlinkSync(backupTempPath);
@@ -62,27 +56,21 @@ app.post('/restore', upload.single('backup'), async (req, res) => {
   const tempPath = req.file.path;
 
   try {
-    // 1. Para o Prisma
     await prisma.$disconnect();
 
-    // 2. Abre o backup e derrama no database.db da raiz
     const backupDb = new Database(tempPath);
     await backupDb.backup(DB_PATH);
     backupDb.close();
 
-    // 3. Limpa arquivos WAL/SHM do database.db (se existirem)
     ['wal', 'shm'].forEach(ext => {
       const file = `${DB_PATH}-${ext}`;
       if (fs.existsSync(file)) fs.unlinkSync(file);
     });
 
-    // 4. Remove o temporário do upload
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 
-    // 5. Aguarda o Linux liberar o arquivo
     await new Promise(r => setTimeout(r, 1000));
 
-    // 6. Reconecta
     await prisma.$connect();
 
     console.log("Restauração feita com sucesso no arquivo:", DB_PATH);
@@ -94,9 +82,7 @@ app.post('/restore', upload.single('backup'), async (req, res) => {
   }
 });
 
-/* =========================
-   USUÁRIOS
-========================= */
+//Rota Usuarios
 
 app.post("/usuarios", async (req, res) => {
   try {
@@ -160,9 +146,7 @@ app.get("/usuarios", async (req, res) => {
   }
 });
 
-/* =========================
-   PAGAMENTOS
-========================= */
+//Rota Pagamentos
 
 app.post("/usuarios/:id/pagamentos", async (req, res) => {
   try {
@@ -208,9 +192,7 @@ app.get("/usuarios/:id/pagamentos", async (req, res) => {
   }
 });
 
-/* =========================
-   PRODUTOS
-========================= */
+//Rota Produtos
 
 app.post("/produtos", async (req, res) => {
   try {
@@ -287,9 +269,7 @@ app.get("/produtos", async (req, res) => {
   }
 });
 
-/* =========================
-   CATEGORIAS
-========================= */
+//Rota Categorias
 
 app.post("/categorias", async (req, res) => {
   try {
@@ -347,9 +327,7 @@ app.get("/categorias", async (req, res) => {
   }
 });
 
-/* =========================
-   VENDAS
-========================= */
+//Rota Vendas
 
 app.post("/vendas", async (req, res) => {
   try {
@@ -393,7 +371,6 @@ console.log("METODO RECEBIDO:", metodoPag);
       include: { itens: true },
     });
 
-    // estoque
     for (const item of itens) {
       await prisma.produto.update({
         where: { id: item.id },
@@ -401,7 +378,6 @@ console.log("METODO RECEBIDO:", metodoPag);
       });
     }
 
-    // dívida
     if (usuarioId) {
       await prisma.usuario.update({
         where: { id: Number(usuarioId) },
