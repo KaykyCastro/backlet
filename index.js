@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import multer from "multer";
+import { createSign } from "crypto";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,6 +20,16 @@ const DB_PATH = path.join(__dirname, "database.db");
 
 app.use(cors());
 app.use(express.json());
+
+const privateKey = fs.readFileSync("private-key.pem", "utf-8")
+
+app.post("/auth", express.text(), (req, res)=> {
+    const signer = createSign("SHA512");
+    signer.update(req.body);
+    signer.end();
+
+    res.send(signer.sign(privateKey, "base64"));
+})
 
 app.get("/backup", (req, res) => {
   const DB_SOURCE = path.resolve(__dirname, "database.db"); 
