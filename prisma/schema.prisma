@@ -11,19 +11,19 @@ enum MetodoPagamento {
   CARTAO_CREDITO
   CARTAO_DEBITO
   PIX
+  FIADO
 }
 
 model Produto {
-  id            Int     @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   nome          String
   preco         Float
-  code  String  @unique
-  estoque       Int     @default(0)
-
+  desconto      Float?  
+  code          String    @unique
+  estoque       Int       @default(0)
   categoriaId   Int
   categoria     Categoria @relation(fields: [categoriaId], references: [id])
-
-  itensVenda    ItemVenda[] 
+  itensVenda    ItemVenda[]
 }
 
 model Categoria {

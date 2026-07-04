@@ -8,6 +8,7 @@ import path from "path";
 import multer from "multer";
 import { createSign } from "crypto";
 import { fileURLToPath } from "url";
+import { getPrecoComDesconto } from "./src/lib/product-helper.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -213,6 +214,7 @@ app.post("/produtos", async (req, res) => {
         preco: Number(req.body.preco),
         estoque: Number(req.body.estoque),
         categoriaId: Number(req.body.categoriaId),
+        desconto: req.body.desconto ? Number(req.body.desconto) : null,
       },
     });
     res.json(produto);
@@ -225,16 +227,19 @@ app.post("/produtos", async (req, res) => {
 app.put("/produtos/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { nome, code, preco, estoque, categoriaId } = req.body;
+    const { nome, code, preco, estoque, categoriaId, desconto } = req.body;
 
     const produto = await prisma.produto.update({
-      where: { id: Number(id)},
+      where: { id: Number(id) },
       data: {
         nome,
-        code: code,
+        code,
         preco: Number(preco),
         estoque: Number(estoque),
-        categoriaId: Number(categoriaId),
+        desconto: desconto ? Number(desconto) : null,
+        categoria: {
+          connect: { id: Number(categoriaId) }
+        }
       },
     });
 
@@ -273,7 +278,13 @@ app.get("/produtos", async (req, res) => {
       orderBy: { nome: "asc" },
     });
 
-    res.json(produtos);
+    const produtosFormatados = produtos.map((p) => ({
+      ...p,
+      preco: p.preco,                          
+      precoComDesconto: getPrecoComDesconto(p),
+    }));
+
+    res.json(produtosFormatados);
   } catch (error) {
     console.error("Erro ao listar produtos:", error);
     res.status(500).json({ error: error.message });
@@ -431,11 +442,15 @@ app.get("/vendas/dia", async (req, res) => {
     end.setHours(23, 59, 59, 999);
 
     const venda = await prisma.venda.findMany({
-      where: {  data: {
-      gte: start,
-      lte: end,
-    }
-   },
+      where: {
+        data: {
+          gte: start,
+          lte: end,
+        },
+        metodo: {
+          not: "FIADO",
+        },
+      },
       include: {
         itens: {
           include: { produto: true },
@@ -447,6 +462,24 @@ app.get("/vendas/dia", async (req, res) => {
     res.json(venda);
   } catch (error) {
     console.error("Erro ao buscar venda:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/vendas/fiado", async (req, res) => {
+  try {
+    const vendas = await prisma.venda.findMany({
+      where: { metodo: "FIADO" },
+      include: {
+        itens: { include: { produto: true } },
+        usuario: true,
+      },
+      orderBy: { data: "desc" },
+    });
+
+    res.json(vendas);
+  } catch (error) {
+    console.error("Erro ao listar fiados:", error);
     res.status(500).json({ error: error.message });
   }
 });
