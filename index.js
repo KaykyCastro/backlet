@@ -24,6 +24,24 @@ app.use(express.json());
 
 const privateKey = fs.readFileSync("private-key.pem", "utf-8")
 
+function parseDesconto(input) {
+  if (input === undefined || input === null || input === "") {
+    return { desconto: null, tipoDesconto: null };
+  }
+
+  const texto = String(input).trim();
+
+  if (texto.endsWith("%")) {
+    const valor = Number(texto.replace("%", "").replace(",", "."));
+    if (isNaN(valor) || valor <= 0) return { desconto: null, tipoDesconto: null };
+    return { desconto: String(valor), tipoDesconto: "percentual" };
+  }
+
+  const valor = Number(texto.replace(",", "."));
+  if (isNaN(valor) || valor <= 0) return { desconto: null, tipoDesconto: null };
+  return { desconto: String(valor), tipoDesconto: "valor" };
+}
+
 app.post("/auth", express.text(), (req, res)=> {
     const signer = createSign("SHA512");
     signer.update(req.body);
@@ -98,9 +116,18 @@ app.post('/restore', upload.single('backup'), async (req, res) => {
 
 app.post("/usuarios", async (req, res) => {
   try {
+    const { nome, cpf, telefone, endereco } = req.body;
+
+    if (!nome || !telefone || !endereco) {
+      return res.status(400).json({ error: "Nome, telefone e endereço são obrigatórios" });
+    }
+
     const usuario = await prisma.usuario.create({
       data: {
-        ...req.body,
+        nome: nome.trim(),
+        cpf: cpf ? cpf.trim() : null,
+        telefone: telefone.trim(),
+        endereco: endereco.trim(),
         divida: Number(req.body.divida) || 0,
       },
     });
@@ -113,9 +140,20 @@ app.post("/usuarios", async (req, res) => {
 
 app.put("/usuarios/:id", async (req, res) => {
   try {
+    const { nome, cpf, telefone, endereco } = req.body;
+
+    if (!nome || !telefone || !endereco) {
+      return res.status(400).json({ error: "Nome, telefone e endereço são obrigatórios" });
+    }
+
     const usuario = await prisma.usuario.update({
       where: { id: Number(req.params.id) },
-      data: req.body,
+      data: {
+        nome: nome.trim(),
+        cpf: cpf ? cpf.trim() : null,
+        telefone: telefone.trim(),
+        endereco: endereco.trim(),
+      },
     });
     res.json(usuario);
   } catch (error) {
@@ -154,6 +192,30 @@ app.get("/usuarios", async (req, res) => {
     res.json(usuarios);
   } catch (error) {
     console.error("Erro ao listar usuários:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/usuarios/:id/vendas", async (req, res) => {
+  try {
+    const usuarioId = Number(req.params.id);
+
+    const vendas = await prisma.venda.findMany({
+      where: {
+        usuarioId,
+        metodo: "FIADO", // só as vendas feitas a fiado desse cliente
+      },
+      include: {
+        itens: {
+          include: { produto: true },
+        },
+      },
+      orderBy: { data: "desc" },
+    });
+
+    res.json(vendas);
+  } catch (error) {
+    console.error("Erro ao listar vendas do usuário:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -208,13 +270,16 @@ app.get("/usuarios/:id/pagamentos", async (req, res) => {
 
 app.post("/produtos", async (req, res) => {
   try {
+    const { desconto, tipoDesconto } = parseDesconto(req.body.desconto);
+
     const produto = await prisma.produto.create({
       data: {
         ...req.body,
         preco: Number(req.body.preco),
         estoque: Number(req.body.estoque),
         categoriaId: Number(req.body.categoriaId),
-        desconto: req.body.desconto ? Number(req.body.desconto) : null,
+        desconto,
+        tipoDesconto,
       },
     });
     res.json(produto);
@@ -227,7 +292,9 @@ app.post("/produtos", async (req, res) => {
 app.put("/produtos/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { nome, code, preco, estoque, categoriaId, desconto } = req.body;
+    const { nome, code, preco, estoque, categoriaId, desconto: descontoInput } = req.body;
+
+    const { desconto, tipoDesconto } = parseDesconto(descontoInput);
 
     const produto = await prisma.produto.update({
       where: { id: Number(id) },
@@ -236,7 +303,8 @@ app.put("/produtos/:id", async (req, res) => {
         code,
         preco: Number(preco),
         estoque: Number(estoque),
-        desconto: desconto ? Number(desconto) : null,
+        desconto,
+        tipoDesconto,
         categoria: {
           connect: { id: Number(categoriaId) }
         }

@@ -18,7 +18,8 @@ model Produto {
   id            Int       @id @default(autoincrement())
   nome          String
   preco         Float
-  desconto      Float?  
+  desconto      String?  
+  tipoDesconto  String?
   code          String    @unique
   estoque       Int       @default(0)
   categoriaId   Int
@@ -36,10 +37,10 @@ model Categoria {
 model Usuario {
   id         Int      @id @default(autoincrement())
   nome       String
-  cpf        String   @unique
+  cpf        String?  @unique
+  telefone   String
   endereco   String
   divida     Decimal
-
   pagamentos Pagamento[]
   vendas     Venda[]
 }
