@@ -132,7 +132,7 @@ app.post("/usuarios", async (req, res) => {
 
 app.put("/usuarios/:id", async (req, res) => {
   try {
-    const { nome, cpf, telefone, endereco, divida } = req.body;
+    const { nome, cpf, telefone, endereco, divida, observacao } = req.body;
 
     const usuario = await prisma.usuario.update({
       where: { id: Number(req.params.id) },
@@ -142,12 +142,30 @@ app.put("/usuarios/:id", async (req, res) => {
         telefone: telefone ? telefone.trim() : null,
         endereco: endereco.trim(),
         divida: Number(divida) || 0,
+        observacao: observacao ? observacao.trim() : null,
       },
     });
 
     res.json(usuario);
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/usuarios/:id/observacao", async (req, res) => {
+  try {
+    const usuarioId = Number(req.params.id);
+    const { observacao } = req.body;
+
+    const usuario = await prisma.usuario.update({
+      where: { id: usuarioId },
+      data: { observacao: observacao?.trim() || null },
+    });
+
+    res.json(usuario);
+  } catch (err) {
+    console.error("Erro ao atualizar observação:", err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -41,6 +41,7 @@ model Usuario {
   telefone   String?
   endereco   String
   divida     Decimal
+  observacao String?
   pagamentos Pagamento[]
   vendas     Venda[]
 }
