@@ -449,6 +449,131 @@ app.post("/vendas", async (req, res) => {
   }
 });
 
+// ---------------- EDITAR VENDA (data, itens, valor) ----------------
+
+app.put("/vendas/:id", async (req, res) => {
+  try {
+    const vendaId = Number(req.params.id);
+    const { data, itens } = req.body;
+
+    if (!itens || itens.length === 0) {
+      return res.status(400).json({ error: "A venda precisa ter ao menos um item" });
+    }
+
+    const resultado = await prisma.$transaction(async (tx) => {
+      const vendaAtual = await tx.venda.findUnique({
+        where: { id: vendaId },
+        include: { itens: true },
+      });
+
+      if (!vendaAtual) {
+        throw new Error("Venda não encontrada");
+      }
+
+      // Devolve ao estoque as quantidades da versão antiga da venda
+      for (const itemAntigo of vendaAtual.itens) {
+        await tx.produto.update({
+          where: { id: itemAntigo.produtoId },
+          data: { estoque: { increment: itemAntigo.quantidade } },
+        });
+      }
+
+      // Remove os itens antigos e recria com os novos valores
+      await tx.itemVenda.deleteMany({ where: { vendaId } });
+
+      let novoTotal = 0;
+      for (const item of itens) {
+        const produto = await tx.produto.findUnique({ where: { id: Number(item.produtoId) } });
+        if (!produto) {
+          throw new Error(`Produto ${item.produtoId} não encontrado`);
+        }
+
+        const quantidade = Number(item.quantidade);
+        const preco = Number(item.preco);
+        novoTotal += quantidade * preco;
+
+        await tx.itemVenda.create({
+          data: { vendaId, produtoId: produto.id, quantidade, preco },
+        });
+
+        await tx.produto.update({
+          where: { id: produto.id },
+          data: { estoque: { decrement: quantidade } },
+        });
+      }
+
+      const diferenca = novoTotal - Number(vendaAtual.total);
+
+      // Ajusta a dívida do cliente pela diferença, só se for fiado
+      if (vendaAtual.metodo === "FIADO" && vendaAtual.usuarioId) {
+        await tx.usuario.update({
+          where: { id: vendaAtual.usuarioId },
+          data: { divida: { increment: diferenca } },
+        });
+      }
+
+      return tx.venda.update({
+        where: { id: vendaId },
+        data: {
+          data: data ? new Date(data) : vendaAtual.data,
+          total: novoTotal,
+        },
+        include: { itens: { include: { produto: true } } },
+      });
+    });
+
+    res.json(resultado);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------- EXCLUIR VENDA ----------------
+
+app.delete("/vendas/:id", async (req, res) => {
+  try {
+    const vendaId = Number(req.params.id);
+
+    await prisma.$transaction(async (tx) => {
+      const venda = await tx.venda.findUnique({
+        where: { id: vendaId },
+        include: { itens: true },
+      });
+
+      if (!venda) {
+        throw new Error("Venda não encontrada");
+      }
+
+      // Devolve o estoque de cada item vendido
+      for (const item of venda.itens) {
+        await tx.produto.update({
+          where: { id: item.produtoId },
+          data: { estoque: { increment: item.quantidade } },
+        });
+      }
+
+      // Estorna a dívida do cliente, se for fiado
+      if (venda.metodo === "FIADO" && venda.usuarioId) {
+        const usuario = await tx.usuario.findUnique({ where: { id: venda.usuarioId } });
+        const novaDivida = Math.max(0, Number(usuario.divida) - Number(venda.total));
+        await tx.usuario.update({
+          where: { id: venda.usuarioId },
+          data: { divida: novaDivida },
+        });
+      }
+
+      await tx.itemVenda.deleteMany({ where: { vendaId } });
+      await tx.venda.delete({ where: { id: vendaId } });
+    });
+
+    res.json({ message: "Venda excluída" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ================= CATEGORIAS =================
 
 app.get("/categorias", async (req, res) => {
