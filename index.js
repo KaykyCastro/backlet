@@ -449,6 +449,42 @@ app.post("/vendas", async (req, res) => {
   }
 });
 
+// GET VENDAS DIA
+
+app.get("/vendas/dia", async (req, res) => {
+  try {
+    const inicio = new Date();
+    inicio.setHours(0, 0, 0, 0);
+
+    const fim = new Date();
+    fim.setHours(23, 59, 59, 999);
+
+    const vendas = await prisma.venda.findMany({
+      where: {
+        data: {
+          gte: inicio,
+          lte: fim,
+        },
+        metodo: {
+          not: "FIADO",
+        },
+      },
+      include: {
+        itens: {
+          include: { produto: true },
+        },
+        usuario: true,
+      },
+      orderBy: { data: "desc" },
+    });
+
+    res.json(vendas);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------------- EDITAR VENDA (data, itens, valor) ----------------
 
 app.put("/vendas/:id", async (req, res) => {
